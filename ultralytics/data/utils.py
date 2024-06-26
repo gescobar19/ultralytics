@@ -101,6 +101,8 @@ def verify_image_label(args):
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
     try:
         # Verify images
+        print("Using updated utils.py")
+
         im = Image.open(im_file)
         im.verify()  # PIL verify
         shape = exif_size(im)  # image size
@@ -130,8 +132,8 @@ def verify_image_label(args):
                     assert lb.shape[1] == (5 + nkpt * ndim), f"labels require {(5 + nkpt * ndim)} columns each"
                     points = lb[:, 5:].reshape(-1, ndim)[:, :2]
                 else:
-                    assert lb.shape[1] == 5, f"labels require 5 columns, {lb.shape[1]} columns detected"
-                    points = lb[:, 1:]
+                    assert lb.shape[1] == 6, f"labels require 6 columns, {lb.shape[1]} columns detected"
+                    points = lb[:, 1:6]  # Ensure correct indexing based on your label format
                 assert points.max() <= 1, f"non-normalized or out of bounds coordinates {points[points > 1]}"
                 assert lb.min() >= 0, f"negative label values {lb[lb < 0]}"
 
@@ -158,12 +160,16 @@ def verify_image_label(args):
             if ndim == 2:
                 kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
                 keypoints = np.concatenate([keypoints, kpt_mask[..., None]], axis=-1)  # (nl, nkpt, 3)
-        lb = lb[:, :5]
+        lb = lb[:, :6]  # Ensure correct indexing based on your label format
         return im_file, lb, shape, segments, keypoints, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1
         msg = f"{prefix}WARNING ⚠️ {im_file}: ignoring corrupt image/label: {e}"
         return [None, None, None, None, None, nm, nf, ne, nc, msg]
+
+
+
+
 
 
 def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):

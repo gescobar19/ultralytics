@@ -311,6 +311,12 @@ class DetectionModel(BaseModel):
         self.inplace = self.yaml.get("inplace", True)
         self.end2end = getattr(self.model[-1], "end2end", False)
 
+        # Modify the final layer to include z-coordinate
+        if isinstance(self.model[-1], Detect):
+            self.model[-1].nc += 1  # Increase number of outputs by 1 for z-coordinate
+            self.model[-1].no += 1  # Increase number of outputs by 1 for z-coordinate
+            self.model[-1].bias = torch.nn.Parameter(torch.cat([self.model[-1].bias, torch.zeros(1)]))
+        
         # Build strides
         m = self.model[-1]  # Detect()
         if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect

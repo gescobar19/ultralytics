@@ -64,25 +64,14 @@ class YOLODataset(BaseDataset):
         super().__init__(*args, **kwargs)
 
     def cache_labels(self, path=Path("./labels.cache")):
-        """
-        Cache dataset labels, check images and read shapes.
-
-        Args:
-            path (Path): Path where to save the cache file. Default is Path('./labels.cache').
-
-        Returns:
-            (dict): labels.
-        """
         x = {"labels": []}
-        nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
+        nm, nf, ne, nc, msgs = 0, 0, 0, 0, []
         desc = f"{self.prefix}Scanning {path.parent / path.stem}..."
         total = len(self.im_files)
         nkpt, ndim = self.data.get("kpt_shape", (0, 0))
         if self.use_keypoints and (nkpt <= 0 or ndim not in {2, 3}):
-            raise ValueError(
-                "'kpt_shape' in data.yaml missing or incorrect. Should be a list with [number of "
-                "keypoints, number of dims (2 for x,y or 3 for x,y,visible)], i.e. 'kpt_shape: [17, 3]'"
-            )
+            raise ValueError("'kpt_shape' in data.yaml missing or incorrect. Should be a list with [number of "
+                             "keypoints, number of dims (2 for x,y or 3 for x,y,visible)], i.e. 'kpt_shape: [17, 3]'")
         with ThreadPool(NUM_THREADS) as pool:
             results = pool.imap(
                 func=verify_image_label,
@@ -108,11 +97,11 @@ class YOLODataset(BaseDataset):
                             "im_file": im_file,
                             "shape": shape,
                             "cls": lb[:, 0:1],  # n, 1
-                            "bboxes": lb[:, 1:],  # n, 4
+                            "bboxes": lb[:, 1:],  # n, 5 including z-coordinate
                             "segments": segments,
                             "keypoints": keypoint,
                             "normalized": True,
-                            "bbox_format": "xywh",
+                            "bbox_format": "xywhz",  # Include z-coordinate
                         }
                     )
                 if msg:
@@ -215,11 +204,8 @@ class YOLODataset(BaseDataset):
         bbox_format = label.pop("bbox_format")
         normalized = label.pop("normalized")
 
-        # NOTE: do NOT resample oriented boxes
         segment_resamples = 100 if self.use_obb else 1000
         if len(segments) > 0:
-            # list[np.array(1000, 2)] * num_samples
-            # (N, 1000, 2)
             segments = np.stack(resample_segments(segments, n=segment_resamples), axis=0)
         else:
             segments = np.zeros((0, segment_resamples, 2), dtype=np.float32)
@@ -228,7 +214,6 @@ class YOLODataset(BaseDataset):
 
     @staticmethod
     def collate_fn(batch):
-        """Collates data samples into batches."""
         new_batch = {}
         keys = batch[0].keys()
         values = list(zip(*[list(b.values()) for b in batch]))
@@ -241,7 +226,7 @@ class YOLODataset(BaseDataset):
             new_batch[k] = value
         new_batch["batch_idx"] = list(new_batch["batch_idx"])
         for i in range(len(new_batch["batch_idx"])):
-            new_batch["batch_idx"][i] += i  # add target image index for build_targets()
+            new_batch["batch_idx"][i] += i
         new_batch["batch_idx"] = torch.cat(new_batch["batch_idx"], 0)
         return new_batch
 
